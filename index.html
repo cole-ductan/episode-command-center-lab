@@ -131,6 +131,9 @@ code{background:#14100c;padding:2px 6px;border-radius:4px;font-size:14px}
 <span id="driveset" style="font-size:12px;margin-left:8px;">
 <button id="driveBtn" class="action" style="font-size:12px;padding:4px 8px;" title="Google Drive sign-in">📁 Drive</button>
 <span id="driveStat" style="color:#888;">not signed in</span>
+</span>
+<span style="font-size:12px;margin-left:8px;">
+<button id="settingsBtn" class="action" style="font-size:12px;padding:4px 8px;" title="Lab settings">⚙️ Settings</button>
 </span> <span id="savestat" style="font-size:12px" title="Save status">●</span></h1>
 <nav class="tabs">
 <button data-view="director" class="active">🎬 Visual Director</button>
@@ -2429,6 +2432,95 @@ document.getElementById('driveBtn').addEventListener('click',()=>{
 });
 updateDriveStat();
 
+// ===== Settings panel: API routing (lab) =====
+const VERTEX_LS='ep002-lab-vertex';
+function getVertexCfg(){ try{return JSON.parse(localStorage.getItem(VERTEX_LS)||'{}');}catch(e){return {};} }
+function saveVertexCfg(c){ try{localStorage.setItem(VERTEX_LS,JSON.stringify(c));}catch(e){} }
+function useVertex(){ const c=getVertexCfg(); return c.enabled===true && c.project && c.key; }
+
+function showSettings(){
+  let m=document.getElementById('settingsPanel');
+  if(!m){
+    m=document.createElement('div');
+    m.id='settingsPanel';
+    m.innerHTML='<div style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:700;display:flex;align-items:center;justify-content:center;padding:20px;" id="settingsBg">'
+      +'<div style="background:#1a1a1a;border:1px solid #444;border-radius:12px;max-width:520px;width:100%;padding:20px;max-height:90vh;overflow:auto;">'
+      +'<h3 style="margin-top:0;">⚙️ Lab Settings</h3>'
+      +'<div style="margin-bottom:16px;padding:12px;background:#222;border-radius:8px;">'
+      +'<b>Gemini API (current)</b><br><span style="color:#888;font-size:13px;">AI Studio API key — working</span><br>'
+      +'<span id="setGeminiStat" style="font-size:13px;"></span></div>'
+      +'<div style="margin-bottom:16px;padding:12px;background:#222;border-radius:8px;">'
+      +'<b>Vertex AI (trial)</b><br>'
+      +'<label style="font-size:14px;"><input type="checkbox" id="setVertexOn"> Use Vertex AI instead of Gemini API</label><br><br>'
+      +'<label style="font-size:13px;">GCP Project ID:<br><input type="text" id="setVertexProj" style="width:100%;padding:6px;background:#333;color:#fff;border:1px solid #555;border-radius:4px;margin-top:4px;"></label><br><br>'
+      +'<label style="font-size:13px;">Location:<br><input type="text" id="setVertexLoc" value="us-central1" style="width:100%;padding:6px;background:#333;color:#fff;border:1px solid #555;border-radius:4px;margin-top:4px;"></label><br><br>'
+      +'<label style="font-size:13px;">API Key or Credential:<br><input type="text" id="setVertexKey" style="width:100%;padding:6px;background:#333;color:#fff;border:1px solid #555;border-radius:4px;margin-top:4px;" placeholder="Paste your Vertex AI key"></label>'
+      +'</div>'
+      +'<div style="display:flex;gap:8px;"><button id="setSave" class="action">Save</button><button id="setClose" class="action">Close</button></div>'
+      +'</div></div>';
+    document.body.appendChild(m);
+    document.getElementById('setClose').addEventListener('click',()=>{m.style.display='none';});
+    document.getElementById('settingsBg').addEventListener('click',e=>{if(e.target.id==='settingsBg')m.style.display='none';});
+    document.getElementById('setSave').addEventListener('click',()=>{
+      const c={
+        enabled:document.getElementById('setVertexOn').checked,
+        project:document.getElementById('setVertexProj').value.trim(),
+        location:document.getElementById('setVertexLoc').value.trim()||'us-central1',
+        key:document.getElementById('setVertexKey').value.trim(),
+      };
+      saveVertexCfg(c);
+      m.style.display='none';
+      updateSettingsStat();
+    });
+  }
+  const c=getVertexCfg();
+  document.getElementById('setVertexOn').checked=c.enabled===true;
+  document.getElementById('setVertexProj').value=c.project||'';
+  document.getElementById('setVertexLoc').value=c.location||'us-central1';
+  document.getElementById('setVertexKey').value=c.key||'';
+  const gs=document.getElementById('setGeminiStat');
+  if(gs){ const k=getGeminiKey(); gs.textContent=k?'✓ API key set':'✗ No API key'; gs.style.color=k?'#4caf50':'#f66'; }
+  m.style.display='block';
+}
+function updateSettingsStat(){ /* header indicator could go here */ }
+document.getElementById('settingsBtn').addEventListener('click',showSettings);
+
+// Unified Gemini call that routes to Vertex AI or AI Studio based on toggle
+async function geminiCall(parts, responseModalities){
+  const vcfg=getVertexCfg();
+  if(useVertex()){
+    // Vertex AI path
+    const url=`https://${vcfg.location}-aiplatform.googleapis.com/v1/projects/${vcfg.project}/locations/${vcfg.location}/publishers/google/models/gemini-2.0-flash:generateContent`;
+    // Vertex uses OAuth or API key - try API key first
+    const resp=await fetch(url+`?key=${encodeURIComponent(vcfg.key)}`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        contents:[{role:'user', parts:parts}],
+        generationConfig:{responseModalities:responseModalities}
+      })
+    });
+    const data=await resp.json();
+    if(data.error) throw new Error(data.error.message||JSON.stringify(data.error));
+    return data;
+  }else{
+    // AI Studio path (current working)
+    const key=getGeminiKey();
+    if(!key) throw new Error('Set your Gemini API key first.');
+    const resp=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-nano-banana-2.1:generateContent?key='+encodeURIComponent(key),{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        contents:[{parts:parts}],
+        generationConfig:{responseModalities:responseModalities}
+      })
+    });
+    const data=await resp.json();
+    if(data.error) throw new Error(data.error.message||JSON.stringify(data.error));
+    return data;
+  }
+}
+
 async function driveListFiles(folderId){
   if(!driveToken){alert('Sign in to Google Drive first.');return [];}
   const q=folderId?`'${folderId}' in parents`:`'root' in parents`;
@@ -2620,11 +2712,8 @@ function showAnimateDialog(ref){
 }
 
 async function animateCharacter(ref, charRefs, styleRefs, presets, extraPrompt, onDone){
-  // Backwards compat
   if(!Array.isArray(charRefs)){ onDone=charRefs; charRefs=[ref]; styleRefs=[]; presets=[]; extraPrompt=''; }
   if(typeof presets==='string'){ extraPrompt=presets; presets=[]; }
-  const key=getGeminiKey();
-  if(!key){alert('Set your Gemini API key first (🔑 button in header).');onDone(null);return;}
   const useChars=(charRefs&&charRefs.length>0)?charRefs:[ref];
   const useStyles=styleRefs||[];
   let prompt='Create a full-body animated character design based on the real person(s) in the reference portrait(s). ';
@@ -2653,16 +2742,7 @@ async function animateCharacter(ref, charRefs, styleRefs, presets, extraPrompt, 
     if(sm) parts.push({inlineData:{mimeType:sm[1], data:sm[2]}});
   });
   try{
-    const resp=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-nano-banana-2.1:generateContent?key='+encodeURIComponent(key),{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        contents:[{parts:parts}],
-        generationConfig:{responseModalities:['TEXT','IMAGE']}
-      })
-    });
-    const data=await resp.json();
-    if(data.error){alert('Gemini error: '+(data.error.message||'unknown'));onDone(null);return;}
+    const data=await geminiCall(parts, ['TEXT','IMAGE']);
     const parts2=(data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts)||[];
     const imgPart=parts2.find(p=>p.inlineData&&p.inlineData.data);
     if(!imgPart){alert('No image generated.');onDone(null);return;}
@@ -2682,8 +2762,6 @@ async function animateCharacter(ref, charRefs, styleRefs, presets, extraPrompt, 
 }
 
 async function geminiGenerate(promptText, onDone){
-  const key=getGeminiKey();
-  if(!key){alert('Set your Gemini API key first (🔑 button in header).');return;}
   const refs=getActiveRefs();
   let fullPrompt=promptText;
   if(refs.length>0){
@@ -2698,16 +2776,7 @@ async function geminiGenerate(promptText, onDone){
     if(m) parts.push({inlineData:{mimeType:m[1], data:m[2]}});
   });
   try{
-    const resp=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-nano-banana-2.1:generateContent?key='+encodeURIComponent(key),{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        contents:[{parts:parts}],
-        generationConfig:{responseModalities:['TEXT','IMAGE']}
-      })
-    });
-    const data=await resp.json();
-    if(data.error){alert('Gemini error: '+(data.error.message||JSON.stringify(data.error)));return;}
+    const data=await geminiCall(parts, ['TEXT','IMAGE']);
     const parts=(data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts)||[];
     const imgPart=parts.find(p=>p.inlineData&&p.inlineData.data);
     if(!imgPart){alert('No image in response. Try a different prompt.');return;}
