@@ -2356,11 +2356,7 @@ function renderRefs(){
       const rs=getRefs();
       const ref=rs[parseInt(b.dataset.animref)];
       if(!ref)return;
-      const orig=b.textContent; b.textContent='⏳...'; b.disabled=true;
-      animateCharacter(ref, (url)=>{
-        b.textContent=orig; b.disabled=false;
-        // The modal's "Use this image" handles adding the ref
-      });
+      showAnimateDialog(ref);
     });
   });
 }
@@ -2428,23 +2424,74 @@ document.addEventListener('click', e => {
   });
 });
 
-async function animateCharacter(ref, onDone){
+function showAnimateDialog(ref){
+  let d=document.getElementById('animDialog');
+  if(!d){
+    d=document.createElement('div');
+    d.id='animDialog';
+    d.innerHTML='<div style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px;" id="animDialogBg">'
+      +'<div style="background:#1a1a1a;border:1px solid #444;border-radius:12px;max-width:500px;width:100%;padding:20px;max-height:90vh;overflow:auto;">'
+      +'<h3 style="margin-top:0;">Animate: <span id="animName"></span></h3>'
+      +'<div style="margin-bottom:12px;"><b>Character references:</b><div id="animChars" style="margin-top:6px;"></div></div>'
+      +'<div style="margin-bottom:12px;"><b>Style references:</b><div id="animStyles" style="margin-top:6px;"></div></div>'
+      +'<div style="margin-bottom:12px;"><b>Extra details:</b><br>'
+      +'<textarea id="animPrompt" rows="3" style="width:100%;background:#222;color:#fff;border:1px solid #444;border-radius:6px;padding:8px;margin-top:6px;" placeholder="e.g. wearing a 1960s floral dress, long flowing hair, warm smile, full body..."></textarea></div>'
+      +'<div style="display:flex;gap:8px;">'
+      +'<button id="animGo" class="action">✨ Generate</button>'
+      +'<button id="animCancel" class="action">Cancel</button>'
+      +'</div></div></div>';
+    document.body.appendChild(d);
+    document.getElementById('animCancel').addEventListener('click',()=>{d.style.display='none';});
+    document.getElementById('animDialogBg').addEventListener('click',e=>{if(e.target.id==='animDialogBg')d.style.display='none';});
+  }
+  const refs=getRefs();
+  const chars=refs.filter(r=>r.type==='character');
+  const styles=refs.filter(r=>r.type==='style');
+  document.getElementById('animName').textContent=ref.name;
+  document.getElementById('animChars').innerHTML=chars.map((r,i)=>
+    '<label style="display:block;font-size:13px;margin:4px 0;"><input type="checkbox" data-animchar="'+refs.indexOf(r)+'" '+(r.name===ref.name?'checked':'')+'> '+r.name+'</label>'
+  ).join('') || '<span style="color:#888;font-size:13px;">None</span>';
+  document.getElementById('animStyles').innerHTML=styles.map((r,i)=>
+    '<label style="display:block;font-size:13px;margin:4px 0;"><input type="checkbox" data-animstyle="'+refs.indexOf(r)+'" '+(r.active?'checked':'')+'> '+r.name+'</label>'
+  ).join('') || '<span style="color:#888;font-size:13px;">None</span>';
+  document.getElementById('animPrompt').value='';
+  d.style.display='block';
+  document.getElementById('animGo').onclick=()=>{
+    const charIdx=[]; d.querySelectorAll('[data-animchar]:checked').forEach(cb=>charIdx.push(parseInt(cb.dataset.animchar)));
+    const styleIdx=[]; d.querySelectorAll('[data-animstyle]:checked').forEach(cb=>styleIdx.push(parseInt(cb.dataset.animstyle)));
+    const extra=document.getElementById('animPrompt').value.trim();
+    const all=getRefs();
+    const charRefs=charIdx.map(i=>all[i]).filter(Boolean);
+    const styleRefs=styleIdx.map(i=>all[i]).filter(Boolean);
+    d.style.display='none';
+    animateCharacter(ref, charRefs, styleRefs, extra, ()=>{});
+  };
+}
+
+async function animateCharacter(ref, charRefs, styleRefs, extraPrompt, onDone){
+  // Backwards compat: if called with old signature
+  if(!Array.isArray(charRefs)){ onDone=charRefs; charRefs=[ref]; styleRefs=getActiveRefs().filter(r=>r.type==='style'); extraPrompt=''; }
   const key=getGeminiKey();
   if(!key){alert('Set your Gemini API key first (🔑 button in header).');onDone(null);return;}
-  const styleRefs=getActiveRefs().filter(r=>r.type==='style');
-  let prompt='Create a full-body animated character design based on the real person in the reference portrait. ';
-  prompt+='This is '+ref.name+'. Keep their facial features, hair, and likeness recognizable. ';
+  const useChars=(charRefs&&charRefs.length>0)?charRefs:[ref];
+  const useStyles=styleRefs||[];
+  let prompt='Create a full-body animated character design based on the real person(s) in the reference portrait(s). ';
+  const names=useChars.map(r=>r.name).join(', ');
+  prompt+='This is '+names+'. Keep their facial features, hair, and likeness recognizable. ';
   prompt+='Show them standing, 3/4 view, neutral expression, plain background. ';
-  prompt+='This character design will be used as the consistent reference for all scenes featuring them.';
-  if(styleRefs.length>0){
-    prompt+=' Match the visual style of the style reference image(s): '+styleRefs.map(r=>r.name).join(', ')+'.';
+  prompt+='This character design will be used as the consistent reference for all scenes featuring them. ';
+  if(useStyles.length>0){
+    prompt+='Match the visual style of: '+useStyles.map(r=>r.name).join(', ')+'. ';
   } else {
-    prompt+=' Illustrated animation style, clean lines, expressive but not cartoonish.';
+    prompt+='Illustrated animation style, clean lines, expressive but not cartoonish. ';
   }
-  const m=ref.data.match(/^data:(image[/][^;]+);base64,(.+)$/);
+  if(extraPrompt) prompt+='Additional details: '+extraPrompt;
   const parts=[{text:prompt}];
-  if(m) parts.push({inlineData:{mimeType:m[1], data:m[2]}});
-  styleRefs.forEach(r=>{
+  useChars.forEach(r=>{
+    const m=r.data.match(/^data:(image[/][^;]+);base64,(.+)$/);
+    if(m) parts.push({inlineData:{mimeType:m[1], data:m[2]}});
+  });
+  useStyles.forEach(r=>{
     const sm=r.data.match(/^data:(image[/][^;]+);base64,(.+)$/);
     if(sm) parts.push({inlineData:{mimeType:sm[1], data:sm[2]}});
   });
