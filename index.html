@@ -2451,7 +2451,13 @@ function showAnimateDialog(ref){
   document.getElementById('animChars').innerHTML=chars.map((r,i)=>
     '<label style="display:block;font-size:13px;margin:4px 0;"><input type="checkbox" data-animchar="'+refs.indexOf(r)+'" '+(r.name===ref.name?'checked':'')+'> '+r.name+'</label>'
   ).join('') || '<span style="color:#888;font-size:13px;">None</span>';
-  document.getElementById('animStyles').innerHTML=styles.map((r,i)=>
+  const STYLE_PRESETS=['Animated','Anime','Photo-realistic','Comic book','Pencil sketch','Watercolor','3D render','Stick figure','Noir','Pop art'];
+  let presetHtml='<div style="margin-bottom:8px;"><b>Style presets:</b><br>';
+  STYLE_PRESETS.forEach(s=>{
+    presetHtml+='<label style="display:inline-block;font-size:12px;margin:4px 8px 4px 0;"><input type="checkbox" data-preset="'+s+'"> '+s+'</label>';
+  });
+  presetHtml+='</div><b>Uploaded styles:</b><br>';
+  document.getElementById('animStyles').innerHTML=presetHtml+styles.map((r,i)=>
     '<label style="display:block;font-size:13px;margin:4px 0;"><input type="checkbox" data-animstyle="'+refs.indexOf(r)+'" '+(r.active?'checked':'')+'> '+r.name+'</label>'
   ).join('') || '<span style="color:#888;font-size:13px;">None</span>';
   document.getElementById('animPrompt').value='';
@@ -2459,18 +2465,27 @@ function showAnimateDialog(ref){
   document.getElementById('animGo').onclick=()=>{
     const charIdx=[]; d.querySelectorAll('[data-animchar]:checked').forEach(cb=>charIdx.push(parseInt(cb.dataset.animchar)));
     const styleIdx=[]; d.querySelectorAll('[data-animstyle]:checked').forEach(cb=>styleIdx.push(parseInt(cb.dataset.animstyle)));
+    const presets=[]; d.querySelectorAll('[data-preset]:checked').forEach(cb=>presets.push(cb.dataset.preset));
     const extra=document.getElementById('animPrompt').value.trim();
     const all=getRefs();
     const charRefs=charIdx.map(i=>all[i]).filter(Boolean);
     const styleRefs=styleIdx.map(i=>all[i]).filter(Boolean);
     d.style.display='none';
-    animateCharacter(ref, charRefs, styleRefs, extra, ()=>{});
+    // Generate one character at a time
+    let qi=0;
+    function next(){
+      if(qi>=charRefs.length){ renderRefs(); return; }
+      const c=charRefs[qi++];
+      animateCharacter(c, [c], styleRefs, presets, extra, ()=>{ next(); });
+    }
+    next();
   };
 }
 
-async function animateCharacter(ref, charRefs, styleRefs, extraPrompt, onDone){
-  // Backwards compat: if called with old signature
-  if(!Array.isArray(charRefs)){ onDone=charRefs; charRefs=[ref]; styleRefs=getActiveRefs().filter(r=>r.type==='style'); extraPrompt=''; }
+async function animateCharacter(ref, charRefs, styleRefs, presets, extraPrompt, onDone){
+  // Backwards compat
+  if(!Array.isArray(charRefs)){ onDone=charRefs; charRefs=[ref]; styleRefs=[]; presets=[]; extraPrompt=''; }
+  if(typeof presets==='string'){ extraPrompt=presets; presets=[]; }
   const key=getGeminiKey();
   if(!key){alert('Set your Gemini API key first (🔑 button in header).');onDone(null);return;}
   const useChars=(charRefs&&charRefs.length>0)?charRefs:[ref];
@@ -2480,9 +2495,14 @@ async function animateCharacter(ref, charRefs, styleRefs, extraPrompt, onDone){
   prompt+='This is '+names+'. Keep their facial features, hair, and likeness recognizable. ';
   prompt+='Show them standing, 3/4 view, neutral expression, plain background. ';
   prompt+='This character design will be used as the consistent reference for all scenes featuring them. ';
+  const usePresets=(presets&&presets.length>0)?presets:[];
+  if(usePresets.length>0){
+    prompt+='Visual style: '+usePresets.join(', ')+'. ';
+  }
   if(useStyles.length>0){
-    prompt+='Match the visual style of: '+useStyles.map(r=>r.name).join(', ')+'. ';
-  } else {
+    prompt+='Match the visual style of these reference images: '+useStyles.map(r=>r.name).join(', ')+'. ';
+  }
+  if(usePresets.length===0 && useStyles.length===0){
     prompt+='Illustrated animation style, clean lines, expressive but not cartoonish. ';
   }
   if(extraPrompt) prompt+='Additional details: '+extraPrompt;
