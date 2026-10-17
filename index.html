@@ -2290,11 +2290,18 @@ const REFS_LS = 'ep002-lab-refs';
 function getRefs(){
   try{
     const raw=localStorage.getItem(REFS_LS);
-    if(raw===null && typeof DEFAULT_REFS!=='undefined'){
-      localStorage.setItem(REFS_LS, JSON.stringify(DEFAULT_REFS));
-      return DEFAULT_REFS.slice();
+    let refs=JSON.parse(raw||'[]');
+    if(typeof DEFAULT_REFS!=='undefined'){
+      const names=new Set(refs.map(r=>r.name));
+      let added=false;
+      DEFAULT_REFS.forEach(d=>{
+        if(!names.has(d.name)){ refs.unshift(d); added=true; }
+      });
+      if(added || raw===null){
+        try{localStorage.setItem(REFS_LS, JSON.stringify(refs));}catch(e){}
+      }
     }
-    return JSON.parse(raw||'[]');
+    return refs;
   }catch(e){return [];}
 }
 function saveRefs(r){ try{localStorage.setItem(REFS_LS, JSON.stringify(r));}catch(e){alert('Storage full - delete some references.');} }
