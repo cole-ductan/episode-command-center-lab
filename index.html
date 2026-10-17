@@ -62,11 +62,11 @@ summary{min-height:44px;display:flex;align-items:center;font-size:15px;color:#ff
 /* lightbox */
 #lb{position:fixed;left:0;right:0;top:54px;bottom:0;background:rgba(0,0,0,.92);display:none;z-index:100;overflow:auto;padding:16px}
 #lb.open{display:block}
-#lb img{width:100%;max-width:800px;display:block;margin:0 auto;border-radius:10px}
+#lb img{width:100%;max-width:800px;max-height:calc(100vh - 220px);object-fit:contain;display:block;margin:0 auto;border-radius:10px}
 #lb .box{max-width:800px;margin:12px auto}
 #lbClose{position:sticky;top:8px;float:right}
 #lbStage{position:relative;max-width:800px;margin:0 auto}
-#lbStage #lbImg{width:100%;max-width:800px;display:block;margin:0 auto;border-radius:10px}
+#lbStage #lbImg{width:100%;max-width:800px;max-height:calc(100vh - 220px);object-fit:contain;display:block;margin:0 auto;border-radius:10px}
 #lbScript{position:absolute;left:10px;right:10px;bottom:10px;background:rgba(10,8,6,.72);border-radius:10px;padding:10px 14px;font-size:16px;line-height:1.45;text-align:left}
 #lbScript p{margin:5px 0}
 #lbScript .speaker{color:#ffb74d;font-weight:700}
@@ -122,7 +122,7 @@ code{background:#14100c;padding:2px 6px;border-radius:4px;font-size:14px}
 </div>
 <audio id="player"></audio>
 </div>
-<header class="top"><h1>EP002 — Episode Command Center <span id="ccver" style="font-size:12px;color:#888">v3.10-lab</span>
+<header class="top"><h1>EP002 — Episode Command Center <span id="ccver" style="font-size:12px;color:#888">v3.11-lab</span>
 <span id="geminiset" style="font-size:12px;margin-left:8px;">
 <button id="geminiKeyBtn" class="action" style="font-size:12px;padding:4px 8px;" title="Set Gemini API key">🔑 Gemini Key</button>
 <span id="geminiStat" style="color:#888;">not set</span>
@@ -2567,7 +2567,7 @@ function showGeneratedImage(url, promptText, useCallback){
     m.innerHTML='<div style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:500;display:flex;align-items:center;justify-content:center;padding:20px;" id="genModalBg">'
       +'<div style="background:#1a1a1a;border:1px solid #444;border-radius:12px;max-width:90vw;max-height:90vh;overflow:auto;padding:16px;">'
       +'<div style="font-size:14px;color:#ccc;margin-bottom:8px;" id="genPrompt"></div>'
-      +'<img id="genImg" style="max-width:100%;border-radius:8px;" />'
+      +'<img id="genImg" style="max-width:100%;max-height:calc(90vh - 160px);object-fit:contain;border-radius:8px;display:block;margin:0 auto;" />'
       +'<div style="margin-top:12px;display:flex;gap:8px;">'
       +'<button id="genUse" class="action">✓ Use this image</button>'
       +'<button id="genClose" class="action">Close</button>'
