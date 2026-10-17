@@ -2320,9 +2320,86 @@ function updateDriveStat(){
   const s=document.getElementById('driveStat');
   if(s){ s.textContent=driveToken?'✓ signed in':'not signed in'; s.style.color=driveToken?'#4caf50':'#888'; }
 }
+async function showDriveBrowser(){
+  let m=document.getElementById('driveBrowser');
+  if(!m){
+    m=document.createElement('div');
+    m.id='driveBrowser';
+    m.innerHTML='<div style="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:600;display:flex;align-items:center;justify-content:center;padding:20px;" id="driveBrowserBg">'
+      +'<div style="background:#1a1a1a;border:1px solid #444;border-radius:12px;max-width:600px;width:100%;padding:20px;max-height:80vh;overflow:auto;">'
+      +'<h3 style="margin-top:0;">📁 Google Drive</h3>'
+      +'<div id="driveFiles" style="font-size:14px;">Loading...</div>'
+      +'<div style="margin-top:12px;"><button id="driveClose" class="action">Close</button></div>'
+      +'</div></div>';
+    document.body.appendChild(m);
+    document.getElementById('driveClose').addEventListener('click',()=>{m.style.display='none';});
+    document.getElementById('driveBrowserBg').addEventListener('click',e=>{if(e.target.id==='driveBrowserBg')m.style.display='none';});
+  }
+  m.style.display='block';
+  const list=document.getElementById('driveFiles');
+  list.innerHTML='Loading...';
+  try{
+    const files=await driveListFiles();
+    if(files.length===0){ list.innerHTML='<p style="color:#888;">No files found in root.</p>'; return; }
+    list.innerHTML=files.map(f=>{
+      const isFolder=f.mimeType==='application/vnd.google-apps.folder';
+      return '<div style="padding:8px;border-bottom:1px solid #333;display:flex;align-items:center;gap:8px;">'
+        +'<span>'+(isFolder?'📁':'📄')+'</span>'
+        +'<span style="flex:1;">'+f.name+'</span>'
+        +(isFolder?'<button class="action" data-drivefolder="'+f.id+'" style="font-size:12px;padding:4px 8px;">Open</button>'
+          :'<button class="action" data-drivefile="'+f.id+'" style="font-size:12px;padding:4px 8px;">Use</button>')
+        +'</div>';
+    }).join('');
+    list.querySelectorAll('[data-drivefolder]').forEach(b=>{
+      b.addEventListener('click',async ()=>{
+        const fid=b.dataset.drivefolder;
+        const sub=await driveListFiles(fid);
+        list.innerHTML='<button class="action" id="driveBack" style="margin-bottom:8px;">← Back</button>'
+          +sub.map(f=>{
+            const isF=f.mimeType==='application/vnd.google-apps.folder';
+            return '<div style="padding:8px;border-bottom:1px solid #333;display:flex;align-items:center;gap:8px;">'
+              +'<span>'+(isF?'📁':'📄')+'</span><span style="flex:1;">'+f.name+'</span>'
+              +(isF?'<button class="action" data-drivefolder="'+f.id+'" style="font-size:12px;">Open</button>'
+                :'<button class="action" data-drivefile="'+f.id+'" style="font-size:12px;">Use</button>')
+              +'</div>';
+          }).join('');
+        document.getElementById('driveBack').addEventListener('click',()=>showDriveBrowser());
+        // Re-wire
+        list.querySelectorAll('[data-drivefolder]').forEach(b2=>b2.addEventListener('click',()=>showDriveBrowser()));
+        list.querySelectorAll('[data-drivefile]').forEach(b2=>b2.addEventListener('click',()=>useDriveFile(b2.dataset.drivefile)));
+      });
+    });
+    list.querySelectorAll('[data-drivefile]').forEach(b=>{
+      b.addEventListener('click',()=>useDriveFile(b.dataset.drivefile));
+    });
+  }catch(e){ list.innerHTML='<p style="color:#f66;">Error: '+e.message+'</p>'; }
+}
+async function useDriveFile(fileId){
+  const f=await driveGetFile(fileId);
+  if(!f)return;
+  // If it's an image, offer to add as reference
+  if(f.mimeType.startsWith('image/')){
+    if(confirm('Add "'+f.name+'" as a reference image?')){
+      // driveGetFile returns text, need base64 for images - fetch as blob
+      const r=await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`,{headers:{'Authorization':'Bearer '+driveToken}});
+      const blob=await r.blob();
+      const reader=new FileReader();
+      reader.onload=e=>{
+        const refs=getRefs();
+        refs.push({name:f.name.split('.')[0], type:'style', data:e.target.result, active:false});
+        saveRefs(refs); renderRefs();
+        alert('Added to references.');
+      };
+      reader.readAsDataURL(blob);
+    }
+  }else{
+    alert('File: '+f.name);
+  }
+  document.getElementById('driveBrowser').style.display='none';
+}
 document.getElementById('driveBtn').addEventListener('click',()=>{
   if(driveToken){
-    if(confirm('Sign out of Google Drive?')){ driveToken=null; updateDriveStat(); }
+    showDriveBrowser();
     return;
   }
   let cid=getDriveCid();
