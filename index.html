@@ -2314,6 +2314,7 @@ function renderRefs(){
     '<img src="'+r.data+'" style="width:100%;border-radius:4px;aspect-ratio:1;object-fit:cover;">'+
     '<div style="font-size:13px;margin:6px 0;"><b>'+r.name+'</b><br><span style="color:#888;">'+r.type+'</span></div>'+
     '<label style="font-size:12px;display:block;margin-bottom:6px;"><input type="checkbox" data-refidx="'+i+'" '+(r.active?'checked':'')+'> Use in generation</label>'+
+    (r.type==='character' ? '<button class="action" data-animref="'+i+'" style="font-size:12px;padding:4px 8px;margin-right:4px;" title="Generate animated version of this character">✨ Animate</button>' : '')+
     '<button class="action" data-delref="'+i+'" style="font-size:12px;padding:4px 8px;">Delete</button></div>'
   ).join('') || '<p style="color:#888;">No references yet. Upload character portraits or style guides above.</p>';
   grid.querySelectorAll('[data-refidx]').forEach(cb=>{
@@ -2325,6 +2326,18 @@ function renderRefs(){
     b.addEventListener('click',()=>{
       if(!confirm('Delete this reference?'))return;
       const rs=getRefs(); rs.splice(parseInt(b.dataset.delref),1); saveRefs(rs); renderRefs();
+    });
+  });
+  grid.querySelectorAll('[data-animref]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      const rs=getRefs();
+      const ref=rs[parseInt(b.dataset.animref)];
+      if(!ref)return;
+      const orig=b.textContent; b.textContent='⏳...'; b.disabled=true;
+      animateCharacter(ref, (url)=>{
+        b.textContent=orig; b.disabled=false;
+        // The modal's "Use this image" handles adding the ref
+      });
     });
   });
 }
@@ -2391,6 +2404,55 @@ document.addEventListener('click', e => {
     showGeneratedImage(url, promptText, useCb);
   });
 });
+
+async function animateCharacter(ref, onDone){
+  const key=getGeminiKey();
+  if(!key){alert('Set your Gemini API key first (🔑 button in header).');onDone(null);return;}
+  const styleRefs=getActiveRefs().filter(r=>r.type==='style');
+  let prompt='Create a full-body animated character design based on the real person in the reference portrait. ';
+  prompt+='This is '+ref.name+'. Keep their facial features, hair, and likeness recognizable. ';
+  prompt+='Show them standing, 3/4 view, neutral expression, plain background. ';
+  prompt+='This character design will be used as the consistent reference for all scenes featuring them.';
+  if(styleRefs.length>0){
+    prompt+=' Match the visual style of the style reference image(s): '+styleRefs.map(r=>r.name).join(', ')+'.';
+  } else {
+    prompt+=' Illustrated animation style, clean lines, expressive but not cartoonish.';
+  }
+  const m=ref.data.match(/^data:(image[/][^;]+);base64,(.+)$/);
+  const parts=[{text:prompt}];
+  if(m) parts.push({inlineData:{mimeType:m[1], data:m[2]}});
+  styleRefs.forEach(r=>{
+    const sm=r.data.match(/^data:(image[/][^;]+);base64,(.+)$/);
+    if(sm) parts.push({inlineData:{mimeType:sm[1], data:sm[2]}});
+  });
+  try{
+    const resp=await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-nano-banana-2.1:generateContent?key='+encodeURIComponent(key),{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        contents:[{parts:parts}],
+        generationConfig:{responseModalities:['TEXT','IMAGE']}
+      })
+    });
+    const data=await resp.json();
+    if(data.error){alert('Gemini error: '+(data.error.message||'unknown'));onDone(null);return;}
+    const parts2=(data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts)||[];
+    const imgPart=parts2.find(p=>p.inlineData&&p.inlineData.data);
+    if(!imgPart){alert('No image generated.');onDone(null);return;}
+    const url='data:'+(imgPart.inlineData.mimeType||'image/png')+';base64,'+imgPart.inlineData.data;
+    showGeneratedImage(url, 'Animated: '+ref.name, (useUrl)=>{
+      const all=getRefs();
+      // Deactivate the real photo
+      const orig=all.find(r=>r.name===ref.name && r.data===ref.data);
+      if(orig) orig.active=false;
+      // Add the animated version as active
+      all.push({name:ref.name+' (animated)', type:'character', data:useUrl, active:true});
+      saveRefs(all);
+      renderRefs();
+    });
+    onDone(url);
+  }catch(e){alert('Failed: '+e.message);onDone(null);}
+}
 
 async function geminiGenerate(promptText, onDone){
   const key=getGeminiKey();
