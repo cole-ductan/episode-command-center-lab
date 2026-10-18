@@ -130,7 +130,7 @@ code{background:#14100c;padding:2px 6px;border-radius:4px;font-size:14px}
 </span>
 <span id="driveset" style="font-size:12px;margin-left:8px;">
 <button id="driveBtn" class="action" style="font-size:12px;padding:4px 8px;" title="Google Drive sign-in">📁 Drive</button>
-<span id="driveStat" style="color:#888;">not signed in</span>
+<span id="driveStat" style="color:#888;">…</span>
 </span>
 <span style="font-size:12px;margin-left:8px;">
 <button id="settingsBtn" class="action" style="font-size:12px;padding:4px 8px;" title="Lab settings">⚙️ Settings</button>
@@ -3027,7 +3027,9 @@ window.addEventListener('load', ()=>{
         }
       });
       tc.requestAccessToken({prompt:'none'});
-    }catch(e){}
+      // If silent refresh doesn't return a token within 3s, show not-signed-in state
+      setTimeout(()=>{ if(!driveToken) updateDriveStat(); }, 3000);
+    }catch(e){ updateDriveStat(); }
   }, 1500);
 });
 </script></body></html>
