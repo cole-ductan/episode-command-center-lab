@@ -2631,11 +2631,13 @@ document.addEventListener('click', e => {
     const pe = fig ? fig.querySelector('.ed[data-field="prompt"]') : null;
     promptText = pe ? pe.innerText : '';
     useCb = (url) => {
-      const img = fig.querySelector('img');
-      if (img) img.src = url;
-      const inp = fig.querySelector('input.swap');
-      if (inp) inp.dataset.swapped = url;
-      save(); syncGallery();
+      downscaleDataUrl(url, 560, 0.82, (small)=>{
+        const img = fig.querySelector('img');
+        if (img) img.src = small;
+        const inp = fig.querySelector('input.swap');
+        if (inp) inp.dataset.swapped = small;
+        save(); syncGallery();
+      });
     };
   } else if (pnum) {
     const pe = g.closest('.prompt').querySelector('.ed[data-field="prompt"]');
@@ -2746,14 +2748,14 @@ async function animateCharacter(ref, charRefs, styleRefs, presets, extraPrompt, 
     if(!imgPart){alert('No image generated.');onDone(null);return;}
     const url='data:'+(imgPart.inlineData.mimeType||'image/png')+';base64,'+imgPart.inlineData.data;
     showGeneratedImage(url, 'Animated: '+ref.name, (useUrl)=>{
-      const all=getRefs();
-      // Deactivate the real photo
-      const orig=all.find(r=>r.name===ref.name && r.data===ref.data);
-      if(orig) orig.active=false;
-      // Add the animated version as active
-      all.push({name:ref.name+' (animated)', type:'character', data:useUrl, active:true});
-      saveRefs(all);
-      renderRefs();
+      downscaleDataUrl(useUrl, 400, 0.8, (small)=>{
+        const all=getRefs();
+        const orig=all.find(r=>r.name===ref.name && r.data===ref.data);
+        if(orig) orig.active=false;
+        all.push({name:ref.name+' (animated)', type:'character', data:small, active:true});
+        saveRefs(all);
+        renderRefs();
+      });
     });
     onDone(url);
   }catch(e){alert('Failed: '+e.message);onDone(null);}
@@ -2783,6 +2785,18 @@ async function geminiGenerate(promptText, onDone){
   }catch(e){alert('Generation failed: '+e.message);}
 }
 
+function downscaleDataUrl(dataUrl, maxPx, quality, cb){
+  const img=new Image();
+  img.onload=()=>{
+    const sc=Math.min(1, maxPx/Math.max(img.width,img.height));
+    const c=document.createElement('canvas');
+    c.width=Math.max(1,Math.round(img.width*sc)); c.height=Math.max(1,Math.round(img.height*sc));
+    c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+    cb(c.toDataURL('image/jpeg', quality));
+  };
+  img.onerror=()=>cb(dataUrl);
+  img.src=dataUrl;
+}
 function showGeneratedImage(url, promptText, useCallback){
   let m=document.getElementById('genModal');
   if(!m){
