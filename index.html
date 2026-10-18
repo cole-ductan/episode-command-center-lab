@@ -2585,7 +2585,7 @@ function renderChat(){
   chatHistory.forEach(m=>{
     const div=document.createElement('div');
     div.style.cssText='margin-bottom:12px;padding:10px 14px;border-radius:10px;max-width:85%;'+(m.role==='user'?'background:#a33;color:#fff;margin-left:auto;':'background:#2a2118;color:#f0e8dc;');
-    div.innerHTML='<b>'+(m.role==='user'?'You':'Assistant')+':</b><br>'+esc(m.text).replace(/\n/g,'<br>');
+    div.innerHTML='<b>'+(m.role==='user'?'You':'Assistant')+':</b><br>'+escH(m.text).replace(/\n/g,'<br>');
     box.appendChild(div);
   });
   box.scrollTop=box.scrollHeight;
