@@ -2423,6 +2423,13 @@ document.getElementById('driveBtn').addEventListener('click',()=>{
     callback:(resp)=>{
       if(resp.access_token){
         driveToken=resp.access_token;
+        // Persist token with expiry (tokens last ~1 hour)
+        try{
+          localStorage.setItem('ep002-lab-drive-token', JSON.stringify({
+            token: resp.access_token,
+            expiry: Date.now() + (resp.expires_in || 3600) * 1000
+          }));
+        }catch(e){}
         updateDriveStat();
       }else{
         alert('Sign-in failed.');
@@ -2967,18 +2974,40 @@ function showGeneratedImage(url, promptText, useCallback){
   const useBtn=document.getElementById('genUse');
   useBtn.onclick=()=>{ m.style.display='none'; useCallback(url); };
 }
-// Silent Google re-auth on load (no popup if consent already granted)
+// Silent Google re-auth on load: restore saved token if valid, else try silent refresh
 window.addEventListener('load', ()=>{
   setTimeout(()=>{
     try{
+      // First: try restoring saved token from localStorage
+      const saved=localStorage.getItem('ep002-lab-drive-token');
+      if(saved){
+        const t=JSON.parse(saved);
+        if(t.token && t.expiry && Date.now() < t.expiry - 60000){
+          driveToken=t.token;
+          updateDriveStat();
+          return;
+        }
+      }
+      // Fallback: try silent token refresh (no popup if session valid)
       const cid=localStorage.getItem('ep002-lab-drive-cid');
       if(!cid || typeof google==='undefined' || !google.accounts || !google.accounts.oauth2) return;
       const tc=google.accounts.oauth2.initTokenClient({
         client_id:cid,
         scope:'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/cloud-platform',
-        callback:(r)=>{ if(r && r.access_token){ driveToken=r.access_token; updateDriveBtn(); } }
+        callback:(r)=>{
+          if(r && r.access_token){
+            driveToken=r.access_token;
+            try{
+              localStorage.setItem('ep002-lab-drive-token', JSON.stringify({
+                token: r.access_token,
+                expiry: Date.now() + (r.expires_in || 3600) * 1000
+              }));
+            }catch(e){}
+            updateDriveStat();
+          }
+        }
       });
-      tc.requestAccessToken({prompt:''});
+      tc.requestAccessToken({prompt:'none'});
     }catch(e){}
   }, 1500);
 });
