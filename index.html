@@ -2418,7 +2418,7 @@ document.getElementById('driveBtn').addEventListener('click',()=>{
   }
   const client=google.accounts.oauth2.initTokenClient({
     client_id:getDriveCid(),
-    scope:'https://www.googleapis.com/auth/drive.readonly',
+    scope:'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/cloud-platform',
     callback:(resp)=>{
       if(resp.access_token){
         driveToken=resp.access_token;
@@ -2436,7 +2436,7 @@ updateDriveStat();
 const VERTEX_LS='ep002-lab-vertex';
 function getVertexCfg(){ try{return JSON.parse(localStorage.getItem(VERTEX_LS)||'{}');}catch(e){return {};} }
 function saveVertexCfg(c){ try{localStorage.setItem(VERTEX_LS,JSON.stringify(c));}catch(e){} }
-function useVertex(){ const c=getVertexCfg(); return c.enabled===true && c.project && c.key; }
+function useVertex(){ const c=getVertexCfg(); return c.enabled===true && c.project; }
 
 function showSettings(){
   let m=document.getElementById('settingsPanel');
@@ -2454,7 +2454,7 @@ function showSettings(){
       +'<label style="font-size:14px;"><input type="checkbox" id="setVertexOn"> Use Vertex AI instead of Gemini API</label><br><br>'
       +'<label style="font-size:13px;">GCP Project ID:<br><input type="text" id="setVertexProj" style="width:100%;padding:6px;background:#333;color:#fff;border:1px solid #555;border-radius:4px;margin-top:4px;"></label><br><br>'
       +'<label style="font-size:13px;">Location:<br><input type="text" id="setVertexLoc" value="us-central1" style="width:100%;padding:6px;background:#333;color:#fff;border:1px solid #555;border-radius:4px;margin-top:4px;"></label><br><br>'
-      +'<label style="font-size:13px;">API Key or Credential:<br><input type="text" id="setVertexKey" style="width:100%;padding:6px;background:#333;color:#fff;border:1px solid #555;border-radius:4px;margin-top:4px;" placeholder="Paste your Vertex AI key"></label>'
+      +'<div style="font-size:13px;color:#888;margin-top:8px;">Uses your Google sign-in (Drive button) — no key needed.</div>'
       +'</div>'
       +'<div style="display:flex;gap:8px;"><button id="setSave" class="action">Save</button><button id="setClose" class="action">Close</button></div>'
       +'</div></div>';
@@ -2466,7 +2466,6 @@ function showSettings(){
         enabled:document.getElementById('setVertexOn').checked,
         project:document.getElementById('setVertexProj').value.trim(),
         location:document.getElementById('setVertexLoc').value.trim()||'us-central1',
-        key:document.getElementById('setVertexKey').value.trim(),
       };
       saveVertexCfg(c);
       m.style.display='none';
@@ -2477,7 +2476,7 @@ function showSettings(){
   document.getElementById('setVertexOn').checked=c.enabled===true;
   document.getElementById('setVertexProj').value=c.project||'';
   document.getElementById('setVertexLoc').value=c.location||'us-central1';
-  document.getElementById('setVertexKey').value=c.key||'';
+
   const gs=document.getElementById('setGeminiStat');
   if(gs){ const k=getGeminiKey(); gs.textContent=k?'✓ API key set':'✗ No API key'; gs.style.color=k?'#4caf50':'#f66'; }
   m.style.display='block';
@@ -2489,12 +2488,11 @@ document.getElementById('settingsBtn').addEventListener('click',showSettings);
 async function geminiCall(parts, responseModalities){
   const vcfg=getVertexCfg();
   if(useVertex()){
-    // Vertex AI path
+    if(!driveToken) throw new Error('Sign in with Google first (Drive button).');
     const url=`https://${vcfg.location}-aiplatform.googleapis.com/v1/projects/${vcfg.project}/locations/${vcfg.location}/publishers/google/models/gemini-2.0-flash:generateContent`;
-    // Vertex uses OAuth or API key - try API key first
-    const resp=await fetch(url+`?key=${encodeURIComponent(vcfg.key)}`,{
+    const resp=await fetch(url,{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+driveToken},
       body:JSON.stringify({
         contents:[{role:'user', parts:parts}],
         generationConfig:{responseModalities:responseModalities}
