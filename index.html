@@ -2489,7 +2489,7 @@ async function geminiCall(parts, responseModalities){
   const vcfg=getVertexCfg();
   if(useVertex()){
     if(!driveToken) throw new Error('Sign in with Google first (Drive button).');
-    const url=`https://${vcfg.location}-aiplatform.googleapis.com/v1/projects/${vcfg.project}/locations/${vcfg.location}/publishers/google/models/gemini-2.0-flash:generateContent`;
+    const url=`https://${vcfg.location}-aiplatform.googleapis.com/v1/projects/${vcfg.project}/locations/${vcfg.location}/publishers/google/models/gemini-2.5-flash-image:generateContent`;
     const resp=await fetch(url,{
       method:'POST',
       headers:{'Content-Type':'application/json','Authorization':'Bearer '+driveToken},
