@@ -2499,7 +2499,10 @@ async function geminiCall(parts, responseModalities){
       })
     });
     const data=await resp.json();
-    if(data.error) throw new Error(data.error.message||JSON.stringify(data.error));
+    if(data.error){
+      const details=data.error.details?JSON.stringify(data.error.details):'';
+      throw new Error('['+resp.status+'] '+(data.error.message||JSON.stringify(data.error))+(details?' | '+details:''));
+    }
     return data;
   }else{
     // AI Studio path (current working)
